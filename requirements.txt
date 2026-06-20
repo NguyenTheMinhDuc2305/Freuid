@@ -1,0 +1,14 @@
+# torch/torchvision: cài KHỚP CUDA của server từ https://pytorch.org (vd cu121/cu124/cu128)
+#   pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+timm==1.0.27
+albumentations==2.0.8
+opencv-python-headless==4.13.0.92
+numpy==2.4.6
+pandas==3.0.3
+scikit-learn==1.9.0
+pillow==12.2.0
+tqdm==4.68.1
+matplotlib==3.10.9
+wandb==0.27.2           # tuỳ chọn (log); bỏ qua nếu WANDB_MODE=disabled
+yacs==0.1.8             # chỉ Path B (TruFor, cần third_party/TruFor clone riêng)
+# google-genai==2.8.0   # chỉ data_prep/gemini_mask (không cần để train)

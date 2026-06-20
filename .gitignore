@@ -1,0 +1,23 @@
+# ===== SECRETS — TUYỆT ĐỐI KHÔNG COMMIT =====
+scripts/.gemini_env
+scripts/.wandb_env
+*.env
+!*.env.example
+
+# ===== DATA / WEIGHTS / OUTPUT (chuyển server riêng, không qua git) =====
+DATA/
+out/
+logs/
+wandb/
+third_party/
+*.pt
+*.pth
+*.pth.tar
+*.th
+*.csv
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/

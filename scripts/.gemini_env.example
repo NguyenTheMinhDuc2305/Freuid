@@ -1,0 +1,4 @@
+# Copy -> scripts/.gemini_env rồi dán key THẬT (file .gemini_env KHÔNG commit — đã gitignore).
+# Chỉ cần cho data_prep/gemini_mask (không bắt buộc để train). Key: https://aistudio.google.com/apikey
+export GEMINI_API_KEY=
+export GEMINI_MODEL=gemini-2.5-flash

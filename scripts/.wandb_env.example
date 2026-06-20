@@ -1,0 +1,3 @@
+# Copy -> scripts/.wandb_env rồi dán W&B API key (file .wandb_env KHÔNG commit — đã gitignore).
+# Bỏ trống = không log W&B (đặt WANDB_MODE=offline hoặc disabled). Key: https://wandb.ai/authorize
+export WANDB_API_KEY=
