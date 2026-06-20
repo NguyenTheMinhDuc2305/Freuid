@@ -90,6 +90,37 @@ def build_transforms(img_size: int = 512, train: bool = True,
     return v2.Compose(t)
 
 
+def ensure_data(data_root: str = DATA_ROOT,
+                competition: str = "the-freuid-challenge-2026-ijcai-ecai") -> str:
+    """Thử dùng DATA; nếu thiếu train_labels.csv -> TẢI từ Kaggle rồi giải nén.
+
+    Cần Kaggle creds: env KAGGLE_USERNAME + KAGGLE_KEY, hoặc ~/.kaggle/kaggle.json.
+    (pip install kaggle). Bỏ qua bước này nếu data đã có.
+    """
+    labels = os.path.join(data_root, "train_labels.csv")
+    if os.path.exists(labels):
+        return data_root
+    import glob
+    import subprocess
+    import sys
+    import zipfile
+    print(f"[ensure_data] thiếu {labels} -> tải từ Kaggle competition '{competition}' ...")
+    os.makedirs(data_root, exist_ok=True)
+    subprocess.run([sys.executable, "-m", "kaggle", "competitions", "download",
+                    "-c", competition, "-p", data_root], check=True)
+    for z in glob.glob(os.path.join(data_root, "*.zip")):
+        print(f"[ensure_data] giải nén {os.path.basename(z)}")
+        with zipfile.ZipFile(z) as zf:
+            zf.extractall(data_root)
+        os.remove(z)
+    if not os.path.exists(labels):
+        raise FileNotFoundError(
+            f"Tải xong nhưng vẫn thiếu {labels}. Kiểm tra Kaggle creds / cấu trúc data "
+            f"(đặt DATA_ROOT nếu data ở nơi khác).")
+    print(f"[ensure_data] OK -> {data_root}")
+    return data_root
+
+
 def make_splits(csv_file: str = TRAIN_CSV, val_frac: float = 0.15,
                 seed: int = 42, leave_out_type: str | None = None):
     """Stratified train/val split by (type,label).
@@ -97,6 +128,7 @@ def make_splits(csv_file: str = TRAIN_CSV, val_frac: float = 0.15,
     leave_out_type: e.g. "EGYPT/DL" -> train on the 4 other types and
     validate on the held-out one (generalization protocol).
     """
+    ensure_data(os.path.dirname(csv_file) or DATA_ROOT)   # thử load, thiếu thì tải
     df = pd.read_csv(csv_file)
     if leave_out_type is not None:
         assert leave_out_type in set(df["type"]), f"unknown type {leave_out_type}"
