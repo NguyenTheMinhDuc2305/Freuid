@@ -25,7 +25,7 @@ from tqdm import tqdm
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
-from src.dataset.dataset import TRAIN_CSV, build_loaders, make_splits  # noqa: E402
+from src.dataset.dataset import TRAIN_CSV, build_loaders, load_env, make_splits  # noqa: E402
 from src.models.clip_classifier import CLIPLinearForgery, count_params  # noqa: E402
 from src.models.forensic_classifier import ForensicForgery  # noqa: E402
 
@@ -141,6 +141,7 @@ def _record_experiment(args, log_dir, metrics):
 
 
 def main():
+    load_env()                          # nạp .env (WANDB/KAGGLE) cho RIÊNG process này, không source ra shell
     args = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     set_seed(args.seed)

@@ -11,5 +11,6 @@ tqdm==4.68.1
 matplotlib==3.10.9
 wandb==0.27.2           # tuỳ chọn (log); bỏ qua nếu WANDB_MODE=disabled
 kaggle                  # auto-tải data khi thiếu (cần KAGGLE_USERNAME+KAGGLE_KEY hoặc ~/.kaggle/kaggle.json)
+python-dotenv           # load .env vào RIÊNG process (không source ra shell)
 yacs==0.1.8             # chỉ Path B (TruFor, cần third_party/TruFor clone riêng)
 # google-genai==2.8.0   # chỉ data_prep/gemini_mask (không cần để train)

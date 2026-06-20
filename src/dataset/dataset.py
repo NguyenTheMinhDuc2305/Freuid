@@ -90,16 +90,28 @@ def build_transforms(img_size: int = 512, train: bool = True,
     return v2.Compose(t)
 
 
+def load_env():
+    """Nạp .env (repo root) vào os.environ CHO RIÊNG process Python này (python-dotenv).
+    Dùng load_dotenv thay vì 'source .env' để KHÔNG xuất key ra shell — an toàn trên server chung.
+    No-op nếu chưa cài python-dotenv hoặc không có .env."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(_REPO, ".env"))
+    except Exception:
+        pass
+
+
 def ensure_data(data_root: str = DATA_ROOT,
                 competition: str = "the-freuid-challenge-2026-ijcai-ecai") -> str:
     """Thử dùng DATA; nếu thiếu train_labels.csv -> TẢI từ Kaggle rồi giải nén.
 
-    Cần Kaggle creds: env KAGGLE_USERNAME + KAGGLE_KEY, hoặc ~/.kaggle/kaggle.json.
-    (pip install kaggle). Bỏ qua bước này nếu data đã có.
+    Creds Kaggle đọc từ .env (KAGGLE_USERNAME + KAGGLE_KEY) qua load_dotenv, hoặc ~/.kaggle/kaggle.json.
+    (pip install kaggle python-dotenv). Bỏ qua bước này nếu data đã có.
     """
     labels = os.path.join(data_root, "train_labels.csv")
     if os.path.exists(labels):
         return data_root
+    load_env()                                            # nạp KAGGLE_* từ .env (chỉ process này)
     import glob
     import subprocess
     import sys
