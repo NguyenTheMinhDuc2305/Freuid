@@ -13,9 +13,12 @@ import os
 
 import pandas as pd
 import torch
-from PIL import Image
+from PIL import Image, ImageFile
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import v2
+
+# Ảnh cụt/đang tải dở vẫn decode được thay vì raise (an toàn cho run dài).
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # Portable: mặc định <repo>/DATA; ghi đè bằng env DATA_ROOT trên server khác.
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -46,7 +49,16 @@ class FraudIDDataset(Dataset):
     def __getitem__(self, idx):
         import random
         row = self.df.iloc[idx]
-        img = Image.open(os.path.join(self.root_dir, row["image_path"])).convert("RGB")
+        path = os.path.join(self.root_dir, row["image_path"])
+        try:
+            img = Image.open(path).convert("RGB")
+        except (FileNotFoundError, OSError) as e:
+            # 1 ảnh thiếu/hỏng không được làm chết cả epoch -> nhảy sang ảnh kế.
+            # (ensure_data đã verify đủ ảnh; đây chỉ là lưới an toàn.)
+            if not getattr(self, "_warned_missing", False):
+                print(f"[FraudIDDataset] WARN ảnh lỗi/thiếu: {path} ({e}); bỏ qua.")
+                self._warned_missing = True
+            return self.__getitem__((idx + 1) % len(self.df))
         label = int(row["label"]) if self.has_label else -1
         # SBI: convert a REAL card into a synthetic fake (label 0 -> 1) before transform
         if self.sbi_prob > 0 and label == 0 and random.random() < self.sbi_prob:
@@ -101,34 +113,81 @@ def load_env():
         pass
 
 
-def ensure_data(data_root: str = DATA_ROOT,
-                competition: str = "the-freuid-challenge-2026-ijcai-ecai") -> str:
-    """Thử dùng DATA; nếu thiếu train_labels.csv -> TẢI từ Kaggle rồi giải nén.
-
-    Creds Kaggle đọc từ .env (KAGGLE_USERNAME + KAGGLE_KEY) qua load_dotenv, hoặc ~/.kaggle/kaggle.json.
-    (pip install kaggle python-dotenv). Bỏ qua bước này nếu data đã có.
-    """
+def _data_complete(data_root: str, sample: int = 400) -> bool:
+    """True nếu train_labels.csv CÓ và (mẫu) ảnh tham chiếu đều tồn tại trên đĩa.
+    Bắt trường hợp tải/giải nén DỞ DANG (CSV có nhưng ảnh thiếu) -> tránh chết giữa epoch."""
     labels = os.path.join(data_root, "train_labels.csv")
-    if os.path.exists(labels):
-        return data_root
-    load_env()                                            # nạp KAGGLE_* từ .env (chỉ process này)
+    if not os.path.exists(labels):
+        return False
+    import csv
+    import random
+    try:
+        with open(labels, newline="") as f:
+            rows = list(csv.DictReader(f))
+    except Exception:
+        return False
+    if not rows:
+        return False
+    col = "image_path" if "image_path" in rows[0] else None
+    if col is None:                                       # layout lạ -> chỉ cần có thư mục train/
+        td = os.path.join(data_root, "train")
+        return os.path.isdir(td) and any(os.scandir(td))
+    pick = rows if len(rows) <= sample else random.sample(rows, sample)
+    missing = [r[col] for r in pick
+               if not os.path.exists(os.path.join(data_root, r[col]))]
+    if missing:
+        print(f"[ensure_data] data CHƯA đủ: {len(missing)}/{len(pick)} ảnh mẫu thiếu "
+              f"(vd {missing[0]}) -> sẽ tải/giải nén lại.")
+        return False
+    return True
+
+
+def _extract_zips(data_root: str) -> None:
     import glob
-    import subprocess
-    import sys
     import zipfile
-    print(f"[ensure_data] thiếu {labels} -> tải từ Kaggle competition '{competition}' ...")
-    os.makedirs(data_root, exist_ok=True)
-    subprocess.run([sys.executable, "-m", "kaggle", "competitions", "download",
-                    "-c", competition, "-p", data_root], check=True)
     for z in glob.glob(os.path.join(data_root, "*.zip")):
-        print(f"[ensure_data] giải nén {os.path.basename(z)}")
+        print(f"[ensure_data] giải nén {os.path.basename(z)} ...")
         with zipfile.ZipFile(z) as zf:
             zf.extractall(data_root)
         os.remove(z)
-    if not os.path.exists(labels):
+
+
+def _download(data_root: str, competition: str) -> None:
+    import subprocess
+    import sys
+    print(f"[ensure_data] tải Kaggle '{competition}' -> {data_root} ...")
+    subprocess.run([sys.executable, "-m", "kaggle", "competitions", "download",
+                    "-c", competition, "-p", data_root], check=True)
+
+
+def ensure_data(data_root: str = DATA_ROOT,
+                competition: str = "the-freuid-challenge-2026-ijcai-ecai") -> str:
+    """Đảm bảo DATA đầy đủ; nếu thiếu/DỞ DANG -> tải Kaggle + giải nén, có VERIFY lại.
+
+    Creds Kaggle đọc từ .env (KAGGLE_USERNAME + KAGGLE_KEY) qua load_dotenv, hoặc ~/.kaggle/kaggle.json.
+    (pip install kaggle python-dotenv).
+    """
+    if _data_complete(data_root):
+        return data_root
+    load_env()                                            # nạp KAGGLE_* từ .env (chỉ process này)
+    import glob
+    import zipfile
+    os.makedirs(data_root, exist_ok=True)
+    # Lần trước có thể tải xong nhưng giải nén dở -> thử giải nén zip còn sót trước.
+    if glob.glob(os.path.join(data_root, "*.zip")):
+        try:
+            _extract_zips(data_root)
+        except zipfile.BadZipFile:                        # zip tải dở -> bỏ, tải lại bên dưới
+            for z in glob.glob(os.path.join(data_root, "*.zip")):
+                os.remove(z)
+    if not _data_complete(data_root):                     # vẫn thiếu -> tải mới rồi giải nén
+        _download(data_root, competition)
+        _extract_zips(data_root)
+    if not _data_complete(data_root):
         raise FileNotFoundError(
-            f"Tải xong nhưng vẫn thiếu {labels}. Kiểm tra Kaggle creds / cấu trúc data "
-            f"(đặt DATA_ROOT nếu data ở nơi khác).")
+            f"Sau khi tải/giải nén, DATA tại {data_root} VẪN thiếu ảnh. Kiểm tra: "
+            f"đĩa còn trống (df -h), Kaggle creds trong .env, đã Join/accept rules competition, "
+            f"hoặc đặt DATA_ROOT trỏ tới data có sẵn.")
     print(f"[ensure_data] OK -> {data_root}")
     return data_root
 
